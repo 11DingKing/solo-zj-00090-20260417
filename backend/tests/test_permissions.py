@@ -284,8 +284,8 @@ class TestAuthenticatedUserPermissions:
 
 @pytest.mark.django_db
 class TestAdminPermissions:
-    def test_admin_can_access_admin_interface(self, admin_client):
-        response = admin_client.get("/admin/")
+    def test_admin_can_access_admin_interface(self, admin_session_client):
+        response = admin_session_client.get("/admin/")
 
         assert response.status_code == status.HTTP_200_OK
 

@@ -249,19 +249,33 @@ class RecipeSerializer(ModelSerializer):
         tags_ids: list[int] = self.initial_data.get("tags")
         ingredients = self.initial_data.get("ingredients")
 
-        if not tags_ids or not ingredients:
-            raise ValidationError("Недостаточно данных.")
+        is_update = self.instance is not None
+        is_partial = self.partial
 
-        tags = tags_exist_validator(tags_ids, Tag)
-        ingredients = ingredients_validator(ingredients, Ingredient)
+        if is_partial:
+            if tags_ids is not None:
+                tags = tags_exist_validator(tags_ids, Tag)
+                data["tags"] = tags
+            if ingredients is not None:
+                ingredients = ingredients_validator(ingredients, Ingredient)
+                data["ingredients"] = ingredients
+        else:
+            if not tags_ids or not ingredients:
+                raise ValidationError("Недостаточно данных.")
 
-        data.update(
-            {
-                "tags": tags,
-                "ingredients": ingredients,
-                "author": self.context.get("request").user,
-            }
-        )
+            tags = tags_exist_validator(tags_ids, Tag)
+            ingredients = ingredients_validator(ingredients, Ingredient)
+
+            data.update(
+                {
+                    "tags": tags,
+                    "ingredients": ingredients,
+                }
+            )
+
+        if not is_update:
+            data["author"] = self.context.get("request").user
+
         return data
 
     @atomic
@@ -292,18 +306,18 @@ class RecipeSerializer(ModelSerializer):
         Returns:
             Recipe: Обновлённый рецепт.
         """
-        tags = validated_data.pop("tags")
-        ingredients = validated_data.pop("ingredients")
+        tags = validated_data.pop("tags", None)
+        ingredients = validated_data.pop("ingredients", None)
 
         for key, value in validated_data.items():
             if hasattr(recipe, key):
                 setattr(recipe, key, value)
 
-        if tags:
+        if tags is not None:
             recipe.tags.clear()
             recipe.tags.set(tags)
 
-        if ingredients:
+        if ingredients is not None:
             recipe.ingredients.clear()
             recipe_ingredients_set(recipe, ingredients)
 

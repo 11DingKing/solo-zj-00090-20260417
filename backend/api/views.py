@@ -5,6 +5,7 @@ from api.permissions import (
     AuthorStaffOrReadOnly,
     DjangoModelPermissions,
     IsAuthenticated,
+    OwnerUserOrReadOnly,
 )
 from api.serializers import (
     IngredientSerializer,
@@ -45,7 +46,7 @@ class UserViewSet(DjoserUserViewSet, AddDelViewMixin):
     """
 
     pagination_class = PageLimitPagination
-    permission_classes = (DjangoModelPermissions,)
+    permission_classes = (OwnerUserOrReadOnly,)
     add_serializer = UserSubscribeSerializer
     link_model = Subscriptions
 
@@ -78,6 +79,22 @@ class UserViewSet(DjoserUserViewSet, AddDelViewMixin):
         return self._delete_relation(Q(author__id=id))
 
     @action(
+        ["get", "put", "patch", "delete"],
+        detail=False,
+        permission_classes=(IsAuthenticated,),
+    )
+    def me(self, request: WSGIRequest, *args, **kwargs) -> Response:
+        self.get_object = self.get_instance
+        if request.method == "GET":
+            return self.retrieve(request, *args, **kwargs)
+        elif request.method == "PUT":
+            return self.update(request, *args, **kwargs)
+        elif request.method == "PATCH":
+            return self.partial_update(request, *args, **kwargs)
+        elif request.method == "DELETE":
+            return self.destroy(request, *args, **kwargs)
+
+    @action(
         methods=("get",), detail=False, permission_classes=(IsAuthenticated,)
     )
     def subscriptions(self, request: WSGIRequest) -> Response:
@@ -93,11 +110,15 @@ class UserViewSet(DjoserUserViewSet, AddDelViewMixin):
                 401 - для неавторизованного пользователя.
                 Список подписок для авторизованного пользователя.
         """
-        pages = self.paginate_queryset(
-            User.objects.filter(subscribers__user=self.request.user)
-        )
-        serializer = UserSubscribeSerializer(pages, many=True)
-        return self.get_paginated_response(serializer.data)
+        queryset = User.objects.filter(subscribers__user=self.request.user)
+        pages = self.paginate_queryset(queryset)
+        
+        if pages is not None:
+            serializer = UserSubscribeSerializer(pages, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = UserSubscribeSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
 
 
 class TagViewSet(ReadOnlyModelViewSet):
@@ -256,7 +277,7 @@ class RecipeViewSet(ModelViewSet, AddDelViewMixin):
         self.link_model = Carts
         return self._delete_relation(Q(recipe__id=pk))
 
-    @action(methods=("get",), detail=False)
+    @action(methods=("get",), detail=False, permission_classes=(IsAuthenticated,))
     def download_shopping_cart(self, request: WSGIRequest) -> Response:
         """Загружает файл *.txt со списком покупок.
 

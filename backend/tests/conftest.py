@@ -62,6 +62,13 @@ def admin_client(admin_user):
 
 
 @pytest.fixture
+def admin_session_client(admin_user):
+    client = APIClient()
+    client.login(username=admin_user.username, password="TestPass123!")
+    return client
+
+
+@pytest.fixture
 def tag():
     return TagFactory()
 

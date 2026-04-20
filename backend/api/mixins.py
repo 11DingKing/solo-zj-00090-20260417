@@ -41,17 +41,54 @@ class AddDelViewMixin:
         Returns:
             Responce: Статус подтверждающий/отклоняющий действие.
         """
+        from django.db import transaction
+
         obj = get_object_or_404(self.queryset, pk=obj_id)
-        try:
-            self.link_model(None, obj.pk, self.request.user.pk).save()
-        except IntegrityError:
+        filter_kwargs = self._get_filter_kwargs(obj)
+
+        if self.link_model.objects.filter(**filter_kwargs).exists():
             return Response(
                 {"error": "Действие выполнено ранее."},
                 status=HTTP_400_BAD_REQUEST,
             )
 
+        if hasattr(self.link_model, 'author') and obj == self.request.user:
+            return Response(
+                {"error": "Нельзя подписаться на самого себя."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            with transaction.atomic():
+                self.link_model.objects.create(**filter_kwargs)
+        except IntegrityError:
+            return Response(
+                {"error": "Действие не может быть выполнено."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+
         serializer: ModelSerializer = self.add_serializer(obj)
         return Response(serializer.data, status=HTTP_201_CREATED)
+
+    def _get_filter_kwargs(self, obj):
+        """Возвращает аргументы для фильтрации связи.
+
+        Args:
+            obj: Объект для создания связи.
+
+        Returns:
+            dict: Аргументы для filter()/create().
+        """
+        if hasattr(self.link_model, 'recipe'):
+            return {
+                'recipe': obj,
+                'user': self.request.user
+            }
+        else:
+            return {
+                'author': obj,
+                'user': self.request.user
+            }
 
     def _delete_relation(self, q: Q) -> Response:
         """Удаляет связь M2M между объектами.
@@ -63,15 +100,12 @@ class AddDelViewMixin:
         Returns:
             Responce: Статус подтверждающий/отклоняющий действие.
         """
-        deleted, _ = (
-            self.link_model.objects.filter(q & Q(user=self.request.user))
-            .first()
-            .delete()
-        )
-        if not deleted:
+        obj = self.link_model.objects.filter(q & Q(user=self.request.user)).first()
+        if not obj:
             return Response(
                 {"error": f"{self.link_model.__name__} не существует"},
                 status=HTTP_400_BAD_REQUEST,
             )
 
+        obj.delete()
         return Response(status=HTTP_204_NO_CONTENT)

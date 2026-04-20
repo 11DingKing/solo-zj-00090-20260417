@@ -1,7 +1,6 @@
 ---
-version: '3.3'
+version: "3.3"
 services:
-
   frontend:
     container_name: foodgram-front
     # image: xewus/foodgram_front:latest
@@ -11,7 +10,7 @@ services:
 
   db:
     container_name: foodgram-db
-    image: postgres:13.0-alpine
+    image: postgres:14.0-alpine
     restart: always
     volumes:
       - postgres_data:/var/lib/postgresql/data/
